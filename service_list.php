@@ -6,37 +6,40 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$search   = isset($_GET['q']) ? trim($_GET['q']) : '';
-$category = isset($_GET['category']) ? $_GET['category'] : 'All';
+$search = isset($_GET['q']) ? trim($_GET['q']) : '';
+$serviceType = isset($_GET['type']) ? $_GET['type'] : 'All';
 
-$sql = "SELECT mi.ItemID, mi.Title, mi.Description, mi.Category, mi.Price,
-               mi.`Condition`, mi.Status, mi.CreatedAt,
-               u.FullName AS SellerName
-        FROM MARKETITEM mi
-        JOIN USER u ON mi.SellerID = u.UserID
-        WHERE mi.Status = 'Available'";
+$sql = "
+    SELECT sp.ProviderID, sp.ServiceType, sp.BusinessName, sp.Area, sp.AverageRating, sp.TotalReviews, u.FullName
+    FROM SERVICEPROVIDER sp
+    JOIN USER u ON sp.ProviderID = u.UserID
+    WHERE u.Status = 'Active'
+";
 
 $params = [];
-$types  = "";
+$types = "";
 
-if ($category !== 'All' && $category !== '') {
-    $sql .= " AND mi.Category = ?";
-    $types  .= "s";
-    $params[] = $category;
+if ($serviceType !== 'All') {
+    $sql .= " AND sp.ServiceType = ?";
+    $types .= "s";
+    $params[] = $serviceType;
 }
 
 if ($search !== '') {
-    $sql .= " AND (mi.Title LIKE ? OR mi.Description LIKE ?)";
-    $types  .= "ss";
-    $like = "%".$search."%";
+    $sql .= " AND (sp.BusinessName LIKE ? OR sp.Area LIKE ?)";
+    $types .= "ss";
+    $like = "%" . $search . "%";
     $params[] = $like;
     $params[] = $like;
 }
 
-$sql .= " ORDER BY mi.CreatedAt DESC";
+$sql .= " ORDER BY sp.AverageRating DESC";
 
 $stmt = $conn->prepare($sql);
-if ($types !== "") {
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
+if ($types) {
     $stmt->bind_param($types, ...$params);
 }
 $stmt->execute();
@@ -46,7 +49,7 @@ $result = $stmt->get_result();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Marketplace - FindR</title>
+    <title>Services - FindR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -162,59 +165,65 @@ $result = $stmt->get_result();
             color:#9ca3af;
             margin-top:0.6rem;
         }
+        .btn {
+            display:inline-block;
+            padding:0.3rem 0.6rem;
+            background:#38bdf8;
+            color:#022c22;
+            border-radius:999px;
+            text-decoration:none;
+            font-weight:600;
+            text-align:center;
+            margin-top:0.5rem;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header-line">
         <div>
-            <h2>Marketplace</h2>
-            <div class="subtitle">Browse available items from other students.</div>
+            <h2>Services</h2>
+            <div class="subtitle">Find cleaners, vans, tutors, and more.</div>
         </div>
         <div class="top-links">
-            <a href="index.php">← Back to dashboard</a>
-            <a href="marketplace_add.php">+ Post item</a>
+            <a href="index.php">← Dashboard</a>
+            <?php if ($_SESSION['role'] === 'ServiceProvider'): ?>
+                <a href="#">+ Manage Services</a> <!-- Extend later if needed -->
+            <?php endif; ?>
         </div>
     </div>
 
     <div class="filter-card">
         <form method="get" class="filter">
-            <input type="text" name="q" placeholder="Search items..."
-                   value="<?php echo htmlspecialchars($search); ?>">
-            <select name="category">
-                <option value="All" <?php if ($category==='All') echo 'selected'; ?>>All</option>
-                <option value="Electronics" <?php if ($category==='Electronics') echo 'selected'; ?>>Electronics</option>
-                <option value="Furniture" <?php if ($category==='Furniture') echo 'selected'; ?>>Furniture</option>
-                <option value="Books" <?php if ($category==='Books') echo 'selected'; ?>>Books</option>
-                <option value="Clothing" <?php if ($category==='Clothing') echo 'selected'; ?>>Clothing</option>
-                <option value="Sports" <?php if ($category==='Sports') echo 'selected'; ?>>Sports</option>
-                <option value="Others" <?php if ($category==='Others') echo 'selected'; ?>>Others</option>
+            <input type="text" name="q" placeholder="Search name or area..." value="<?php echo htmlspecialchars($search); ?>">
+            <select name="type">
+                <option value="All" <?php if ($serviceType==='All') echo 'selected'; ?>>All Types</option>
+                <option value="Cleaner" <?php if ($serviceType==='Cleaner') echo 'selected'; ?>>Cleaner</option>
+                <option value="Van" <?php if ($serviceType==='Van') echo 'selected'; ?>>Van</option>
+                <option value="Tuition" <?php if ($serviceType==='Tuition') echo 'selected'; ?>>Tuition</option>
+                <option value="Mess" <?php if ($serviceType==='Mess') echo 'selected'; ?>>Mess</option>
+                <option value="Other" <?php if ($serviceType==='Other') echo 'selected'; ?>>Other</option>
             </select>
             <button type="submit">Apply</button>
         </form>
     </div>
 
     <?php if ($result->num_rows === 0): ?>
-        <div class="empty">No items found. Try changing filters or <a href="marketplace_add.php" style="color:#38bdf8;">post a new item</a>.</div>
+        <div class="empty">No services found.</div>
     <?php else: ?>
         <div class="grid">
             <?php while ($row = $result->fetch_assoc()): ?>
                 <div class="item-card">
                     <div class="item-top-line">
-                        <div class="item-title"><?php echo htmlspecialchars($row['Title']); ?></div>
-                        <div class="price">BDT <?php echo number_format($row['Price'], 2); ?></div>
+                        <div class="item-title"><?php echo htmlspecialchars($row['BusinessName']); ?></div>
+                        <div class="price">Rating: <?php echo $row['AverageRating']; ?> (<?php echo $row['TotalReviews']; ?> reviews)</div>
                     </div>
                     <div class="meta">
-                        <span class="pill"><?php echo htmlspecialchars($row['Category']); ?></span>
-                        <span class="pill"><?php echo htmlspecialchars($row['Condition']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['ServiceType']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['Area']); ?></span>
                     </div>
-                    <div class="meta">
-                        Seller: <?php echo htmlspecialchars($row['SellerName']); ?> •
-                        Posted: <?php echo htmlspecialchars($row['CreatedAt']); ?>
-                    </div>
-                    <div class="desc">
-                        <?php echo nl2br(htmlspecialchars($row['Description'])); ?>
-                    </div>
+                    <div class="meta">Provider: <?php echo htmlspecialchars($row['FullName']); ?></div>
+                    <a href="service_book.php?provider_id=<?php echo $row['ProviderID']; ?>" class="btn">Book Now</a>
                 </div>
             <?php endwhile; ?>
         </div>
@@ -222,7 +231,4 @@ $result = $stmt->get_result();
 </div>
 </body>
 </html>
-<?php
-$stmt->close();
-$conn->close();
-?>
+<?php $stmt->close(); $conn->close(); ?>

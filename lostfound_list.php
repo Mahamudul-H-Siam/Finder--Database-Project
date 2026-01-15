@@ -6,37 +6,41 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$search   = isset($_GET['q']) ? trim($_GET['q']) : '';
-$category = isset($_GET['category']) ? $_GET['category'] : 'All';
+$search = isset($_GET['q']) ? trim($_GET['q']) : '';
+$postType = isset($_GET['type']) ? $_GET['type'] : 'All';
 
-$sql = "SELECT mi.ItemID, mi.Title, mi.Description, mi.Category, mi.Price,
-               mi.`Condition`, mi.Status, mi.CreatedAt,
-               u.FullName AS SellerName
-        FROM MARKETITEM mi
-        JOIN USER u ON mi.SellerID = u.UserID
-        WHERE mi.Status = 'Available'";
+$sql = "
+    SELECT lf.LFID, lf.PostType, lf.Title, lf.Description, lf.Location, lf.ContactInfo, lf.Date, u.FullName AS ReporterName
+    FROM LOSTFOUND lf
+    JOIN USER u ON lf.ReporterID = u.UserID
+    WHERE lf.Status = 'Open'
+";
 
 $params = [];
-$types  = "";
+$types = "";
 
-if ($category !== 'All' && $category !== '') {
-    $sql .= " AND mi.Category = ?";
-    $types  .= "s";
-    $params[] = $category;
+if ($postType !== 'All') {
+    $sql .= " AND lf.PostType = ?";
+    $types .= "s";
+    $params[] = $postType;
 }
 
 if ($search !== '') {
-    $sql .= " AND (mi.Title LIKE ? OR mi.Description LIKE ?)";
-    $types  .= "ss";
-    $like = "%".$search."%";
+    $sql .= " AND (lf.Title LIKE ? OR lf.Description LIKE ? OR lf.Location LIKE ?)";
+    $types .= "sss";
+    $like = "%" . $search . "%";
+    $params[] = $like;
     $params[] = $like;
     $params[] = $like;
 }
 
-$sql .= " ORDER BY mi.CreatedAt DESC";
+$sql .= " ORDER BY lf.Date DESC";
 
 $stmt = $conn->prepare($sql);
-if ($types !== "") {
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
+if ($types) {
     $stmt->bind_param($types, ...$params);
 }
 $stmt->execute();
@@ -46,7 +50,7 @@ $result = $stmt->get_result();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Marketplace - FindR</title>
+    <title>Lost & Found - FindR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -168,53 +172,42 @@ $result = $stmt->get_result();
 <div class="container">
     <div class="header-line">
         <div>
-            <h2>Marketplace</h2>
-            <div class="subtitle">Browse available items from other students.</div>
+            <h2>Lost & Found</h2>
+            <div class="subtitle">Report or find lost items.</div>
         </div>
         <div class="top-links">
-            <a href="index.php">← Back to dashboard</a>
-            <a href="marketplace_add.php">+ Post item</a>
+            <a href="index.php">← Dashboard</a>
+            <a href="lostfound_add.php">+ Post</a>
         </div>
     </div>
 
     <div class="filter-card">
         <form method="get" class="filter">
-            <input type="text" name="q" placeholder="Search items..."
-                   value="<?php echo htmlspecialchars($search); ?>">
-            <select name="category">
-                <option value="All" <?php if ($category==='All') echo 'selected'; ?>>All</option>
-                <option value="Electronics" <?php if ($category==='Electronics') echo 'selected'; ?>>Electronics</option>
-                <option value="Furniture" <?php if ($category==='Furniture') echo 'selected'; ?>>Furniture</option>
-                <option value="Books" <?php if ($category==='Books') echo 'selected'; ?>>Books</option>
-                <option value="Clothing" <?php if ($category==='Clothing') echo 'selected'; ?>>Clothing</option>
-                <option value="Sports" <?php if ($category==='Sports') echo 'selected'; ?>>Sports</option>
-                <option value="Others" <?php if ($category==='Others') echo 'selected'; ?>>Others</option>
+            <input type="text" name="q" placeholder="Search title, desc, location..." value="<?php echo htmlspecialchars($search); ?>">
+            <select name="type">
+                <option value="All" <?php if ($postType==='All') echo 'selected'; ?>>All</option>
+                <option value="Lost" <?php if ($postType==='Lost') echo 'selected'; ?>>Lost</option>
+                <option value="Found" <?php if ($postType==='Found') echo 'selected'; ?>>Found</option>
             </select>
             <button type="submit">Apply</button>
         </form>
     </div>
 
     <?php if ($result->num_rows === 0): ?>
-        <div class="empty">No items found. Try changing filters or <a href="marketplace_add.php" style="color:#38bdf8;">post a new item</a>.</div>
+        <div class="empty">No posts found.</div>
     <?php else: ?>
         <div class="grid">
             <?php while ($row = $result->fetch_assoc()): ?>
                 <div class="item-card">
                     <div class="item-top-line">
                         <div class="item-title"><?php echo htmlspecialchars($row['Title']); ?></div>
-                        <div class="price">BDT <?php echo number_format($row['Price'], 2); ?></div>
                     </div>
                     <div class="meta">
-                        <span class="pill"><?php echo htmlspecialchars($row['Category']); ?></span>
-                        <span class="pill"><?php echo htmlspecialchars($row['Condition']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['PostType']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['Location']); ?></span>
                     </div>
-                    <div class="meta">
-                        Seller: <?php echo htmlspecialchars($row['SellerName']); ?> •
-                        Posted: <?php echo htmlspecialchars($row['CreatedAt']); ?>
-                    </div>
-                    <div class="desc">
-                        <?php echo nl2br(htmlspecialchars($row['Description'])); ?>
-                    </div>
+                    <div class="desc"><?php echo nl2br(htmlspecialchars($row['Description'])); ?></div>
+                    <div class="meta">Reporter: <?php echo htmlspecialchars($row['ReporterName']); ?> | Contact: <?php echo htmlspecialchars($row['ContactInfo']); ?> | Date: <?php echo $row['Date']; ?></div>
                 </div>
             <?php endwhile; ?>
         </div>
@@ -222,7 +215,4 @@ $result = $stmt->get_result();
 </div>
 </body>
 </html>
-<?php
-$stmt->close();
-$conn->close();
-?>
+<?php $stmt->close(); $conn->close(); ?>

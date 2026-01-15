@@ -6,36 +6,54 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-$search   = isset($_GET['q']) ? trim($_GET['q']) : '';
-$category = isset($_GET['category']) ? $_GET['category'] : 'All';
+$search = isset($_GET['q']) ? trim($_GET['q']) : '';
+$listingType = isset($_GET['type']) ? $_GET['type'] : 'All';
+$gender = isset($_GET['gender']) ? $_GET['gender'] : 'All';
+$minPrice = isset($_GET['min_price']) ? (float)$_GET['min_price'] : 0;
+$maxPrice = isset($_GET['max_price']) ? (float)$_GET['max_price'] : PHP_FLOAT_MAX;
 
-$sql = "SELECT mi.ItemID, mi.Title, mi.Description, mi.Category, mi.Price,
-               mi.`Condition`, mi.Status, mi.CreatedAt,
-               u.FullName AS SellerName
-        FROM MARKETITEM mi
-        JOIN USER u ON mi.SellerID = u.UserID
-        WHERE mi.Status = 'Available'";
+$sql = "SELECT rl.RoomID, rl.Title, rl.Description, rl.LocationArea, rl.RentAmount, 
+               rl.UtilitiesIncluded, rl.GenderPreference, rl.ListingType, rl.CreatedAt,
+               u.FullName AS OwnerName
+        FROM ROOMLISTING rl
+        JOIN USER u ON rl.OwnerID = u.UserID
+        WHERE rl.Status = 'Available' AND rl.IsVerified = 1";  // Only show verified listings
 
 $params = [];
-$types  = "";
+$types = "";
 
-if ($category !== 'All' && $category !== '') {
-    $sql .= " AND mi.Category = ?";
-    $types  .= "s";
-    $params[] = $category;
+if ($listingType !== 'All' && $listingType !== '') {
+    $sql .= " AND rl.ListingType = ?";
+    $types .= "s";
+    $params[] = $listingType;
 }
+
+if ($gender !== 'All' && $gender !== '') {
+    $sql .= " AND rl.GenderPreference = ?";
+    $types .= "s";
+    $params[] = $gender;
+}
+
+$sql .= " AND rl.RentAmount BETWEEN ? AND ?";
+$types .= "dd";
+$params[] = $minPrice;
+$params[] = $maxPrice;
 
 if ($search !== '') {
-    $sql .= " AND (mi.Title LIKE ? OR mi.Description LIKE ?)";
-    $types  .= "ss";
-    $like = "%".$search."%";
+    $sql .= " AND (rl.Title LIKE ? OR rl.Description LIKE ? OR rl.LocationArea LIKE ?)";
+    $types .= "sss";
+    $like = "%" . $search . "%";
+    $params[] = $like;
     $params[] = $like;
     $params[] = $like;
 }
 
-$sql .= " ORDER BY mi.CreatedAt DESC";
+$sql .= " ORDER BY rl.CreatedAt DESC";
 
 $stmt = $conn->prepare($sql);
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
 if ($types !== "") {
     $stmt->bind_param($types, ...$params);
 }
@@ -46,7 +64,7 @@ $result = $stmt->get_result();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Marketplace - FindR</title>
+    <title>Rooms - FindR</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         body {
@@ -162,59 +180,79 @@ $result = $stmt->get_result();
             color:#9ca3af;
             margin-top:0.6rem;
         }
+        .btn {
+            display:inline-block;
+            padding:0.3rem 0.6rem;
+            background:#38bdf8;
+            color:#022c22;
+            border-radius:999px;
+            text-decoration:none;
+            font-weight:600;
+            text-align:center;
+            margin-top:0.5rem;
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header-line">
         <div>
-            <h2>Marketplace</h2>
-            <div class="subtitle">Browse available items from other students.</div>
+            <h2>Rooms & Hostels</h2>
+            <div class="subtitle">Browse available rooms, hostel beds, or roommate ads.</div>
         </div>
         <div class="top-links">
             <a href="index.php">← Back to dashboard</a>
-            <a href="marketplace_add.php">+ Post item</a>
+            <?php if ($_SESSION['role'] === 'Owner'): ?>
+                <a href="room_new.php">+ Post listing</a>
+            <?php endif; ?>
         </div>
     </div>
 
     <div class="filter-card">
         <form method="get" class="filter">
-            <input type="text" name="q" placeholder="Search items..."
-                   value="<?php echo htmlspecialchars($search); ?>">
-            <select name="category">
-                <option value="All" <?php if ($category==='All') echo 'selected'; ?>>All</option>
-                <option value="Electronics" <?php if ($category==='Electronics') echo 'selected'; ?>>Electronics</option>
-                <option value="Furniture" <?php if ($category==='Furniture') echo 'selected'; ?>>Furniture</option>
-                <option value="Books" <?php if ($category==='Books') echo 'selected'; ?>>Books</option>
-                <option value="Clothing" <?php if ($category==='Clothing') echo 'selected'; ?>>Clothing</option>
-                <option value="Sports" <?php if ($category==='Sports') echo 'selected'; ?>>Sports</option>
-                <option value="Others" <?php if ($category==='Others') echo 'selected'; ?>>Others</option>
+            <input type="text" name="q" placeholder="Search title, desc, area..." value="<?php echo htmlspecialchars($search); ?>">
+            <select name="type">
+                <option value="All" <?php if ($listingType==='All') echo 'selected'; ?>>All types</option>
+                <option value="Room" <?php if ($listingType==='Room') echo 'selected'; ?>>Room</option>
+                <option value="HostelBed" <?php if ($listingType==='HostelBed') echo 'selected'; ?>>Hostel Bed</option>
+                <option value="RoommateWanted" <?php if ($listingType==='RoommateWanted') echo 'selected'; ?>>Roommate Wanted</option>
             </select>
+            <select name="gender">
+                <option value="All" <?php if ($gender==='All') echo 'selected'; ?>>All genders</option>
+                <option value="Any" <?php if ($gender==='Any') echo 'selected'; ?>>Any</option>
+                <option value="Male" <?php if ($gender==='Male') echo 'selected'; ?>>Male</option>
+                <option value="Female" <?php if ($gender==='Female') echo 'selected'; ?>>Female</option>
+            </select>
+            <input type="number" name="min_price" placeholder="Min rent" value="<?php echo $minPrice > 0 ? $minPrice : ''; ?>">
+            <input type="number" name="max_price" placeholder="Max rent" value="<?php echo $maxPrice < PHP_FLOAT_MAX ? $maxPrice : ''; ?>">
             <button type="submit">Apply</button>
         </form>
     </div>
 
     <?php if ($result->num_rows === 0): ?>
-        <div class="empty">No items found. Try changing filters or <a href="marketplace_add.php" style="color:#38bdf8;">post a new item</a>.</div>
+        <div class="empty">No listings found. Try changing filters or <?php if ($_SESSION['role'] === 'Owner'): ?><a href="room_new.php" style="color:#38bdf8;">post a new listing</a><?php endif; ?>.</div>
     <?php else: ?>
         <div class="grid">
             <?php while ($row = $result->fetch_assoc()): ?>
                 <div class="item-card">
                     <div class="item-top-line">
                         <div class="item-title"><?php echo htmlspecialchars($row['Title']); ?></div>
-                        <div class="price">BDT <?php echo number_format($row['Price'], 2); ?></div>
+                        <div class="price">BDT <?php echo number_format($row['RentAmount'], 2); ?></div>
                     </div>
                     <div class="meta">
-                        <span class="pill"><?php echo htmlspecialchars($row['Category']); ?></span>
-                        <span class="pill"><?php echo htmlspecialchars($row['Condition']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['ListingType']); ?></span>
+                        <span class="pill"><?php echo htmlspecialchars($row['GenderPreference']); ?></span>
+                        <?php if ($row['UtilitiesIncluded']): ?><span class="pill">Utilities Inc.</span><?php endif; ?>
                     </div>
                     <div class="meta">
-                        Seller: <?php echo htmlspecialchars($row['SellerName']); ?> •
+                        Area: <?php echo htmlspecialchars($row['LocationArea']); ?> •
+                        Owner: <?php echo htmlspecialchars($row['OwnerName']); ?> •
                         Posted: <?php echo htmlspecialchars($row['CreatedAt']); ?>
                     </div>
                     <div class="desc">
                         <?php echo nl2br(htmlspecialchars($row['Description'])); ?>
                     </div>
+                    <a href="room_apply.php?room_id=<?php echo $row['RoomID']; ?>" class="btn">Apply</a>
                 </div>
             <?php endwhile; ?>
         </div>
