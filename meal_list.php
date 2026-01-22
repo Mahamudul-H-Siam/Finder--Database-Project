@@ -19,6 +19,14 @@ if (!$stmt) {
 }
 $stmt->execute();
 $result = $stmt->get_result();
+
+// Meal calculator
+$calcResult = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_meal'])) {
+    $monthlyPrice = (float)$_POST['monthly_price'];
+    $months = (int)$_POST['months'];
+    $calcResult = $monthlyPrice * $months;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -62,61 +70,24 @@ $result = $stmt->get_result();
         .top-links a { color:#38bdf8; margin-left:0.6rem; }
         .grid {
             display:grid;
-            grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-            gap:0.75rem;
-            margin-top:0.75rem;
+            gap:1rem;
         }
-        .item-card {
-            display:flex;
-            flex-direction:column;
-            gap:0.4rem;
-            font-size:0.85rem;
-        }
-        .item-title {
-            font-size:0.95rem;
-            font-weight:600;
-        }
-        .item-top-line {
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:0.5rem;
-        }
-        .pill {
-            padding:0.2rem 0.55rem;
-            border-radius:999px;
-            border:1px solid #374151;
-            font-size:0.7rem;
-            color:#9ca3af;
-        }
-        .price {
-            font-weight:600;
-            color:#bbf7d0;
-        }
-        .meta {
-            font-size:0.75rem;
-            color:#9ca3af;
-        }
-        .desc {
-            font-size:0.8rem;
-            color:#d1d5db;
-        }
-        .empty {
-            font-size:0.85rem;
-            color:#9ca3af;
-            margin-top:0.6rem;
+        .card {
+            background: rgba(15,23,42,0.96);
+            border-radius: 12px;
+            border:1px solid #1f2937;
+            padding:1rem;
         }
         .btn {
-            display:inline-block;
-            padding:0.3rem 0.6rem;
-            background:#38bdf8;
+            padding:0.5rem 1rem;
+            background:linear-gradient(to right,#22c55e,#16a34a);
             color:#022c22;
             border-radius:999px;
             text-decoration:none;
-            font-weight:600;
-            text-align:center;
-            margin-top:0.5rem;
         }
+        .form-group { margin-bottom:0.75rem; }
+        .form-group input { width:100%; padding:0.4rem; border:1px solid #374151; background:#020617; color:#e5e7eb; border-radius:0.5rem; }
+        .result { color:#bbf7d0; }
     </style>
 </head>
 <body>
@@ -124,33 +95,51 @@ $result = $stmt->get_result();
     <div class="header-line">
         <div>
             <h2>Meal Plans</h2>
-            <div class="subtitle">Subscribe to monthly meals.</div>
+            <div class="subtitle">Subscribe to monthly meals and calculate costs.</div>
         </div>
         <div class="top-links">
             <a href="index.php">← Dashboard</a>
         </div>
     </div>
 
-    <?php if ($result->num_rows === 0): ?>
-        <div class="empty">No plans available.</div>
-    <?php else: ?>
-        <div class="grid">
-            <?php while ($row = $result->fetch_assoc()): ?>
-                <div class="item-card">
-                    <div class="item-top-line">
-                        <div class="item-title"><?php echo htmlspecialchars($row['Name']); ?></div>
-                        <div class="price">BDT <?php echo number_format($row['MonthlyPrice'], 2); ?>/month</div>
-                    </div>
-                    <div class="meta">
-                        <span class="pill"><?php echo htmlspecialchars($row['BusinessName']); ?></span>
-                        <span class="pill"><?php echo htmlspecialchars($row['Area']); ?></span>
-                    </div>
-                    <div class="desc"><?php echo nl2br(htmlspecialchars($row['Details'])); ?></div>
-                    <a href="meal_subscribe.php?plan_id=<?php echo $row['MealPlanID']; ?>" class="btn">Subscribe</a>
-                </div>
-            <?php endwhile; ?>
+    <div class="grid">
+        <div class="card">
+            <h3>Available Plans</h3>
+            <?php if ($result->num_rows === 0): ?>
+                <p>No plans available.</p>
+            <?php else: ?>
+                <ul>
+                    <?php while ($row = $result->fetch_assoc()): ?>
+                        <li>
+                            <strong><?php echo htmlspecialchars($row['Name']); ?></strong> - BDT <?php echo number_format($row['MonthlyPrice'], 2); ?>/month<br>
+                            Details: <?php echo htmlspecialchars($row['Details']); ?><br>
+                            Provider: <?php echo htmlspecialchars($row['BusinessName']); ?> (<?php echo htmlspecialchars($row['Area']); ?>)<br>
+                            <a href="meal_subscribe.php?plan_id=<?php echo $row['MealPlanID']; ?>" class="btn">Subscribe</a>
+                        </li>
+                    <?php endwhile; ?>
+                </ul>
+            <?php endif; ?>
         </div>
-    <?php endif; ?>
+
+        <div class="card">
+            <h3>Meal Cost Calculator</h3>
+            <form method="post">
+                <input type="hidden" name="calculate_meal" value="1">
+                <div class="form-group">
+                    <label>Monthly Price (BDT)</label>
+                    <input type="number" step="0.01" name="monthly_price" required>
+                </div>
+                <div class="form-group">
+                    <label>Number of Months</label>
+                    <input type="number" name="months" required min="1">
+                </div>
+                <button type="submit" class="btn">Calculate</button>
+            </form>
+            <?php if ($calcResult !== null): ?>
+                <div class="result">Total Cost: BDT <?php echo number_format($calcResult, 2); ?></div>
+            <?php endif; ?>
+        </div>
+    </div>
 </div>
 </body>
 </html>

@@ -1,0 +1,30 @@
+# Admin Post Management - Quick Guide
+
+## Issue: Posts showing as "Available" instead of "Pending"
+
+**Solution:** Run this in phpMyAdmin to fix existing posts:
+
+```sql
+UPDATE MARKETITEM SET Status = 'Pending' WHERE Status = 'Available' OR Status IS NULL OR Status = '';
+```
+
+Then refresh the admin panel - you'll see approve/decline buttons!
+
+## How Approve/Decline Works
+
+**For Pending Posts:**
+- ✅ **Approve** button (green) - Makes post visible
+- ✗ **Decline** button (yellow) - Hides post
+
+**For Other Posts:**
+- Only **Edit** and **Delete** buttons show
+
+## Quick Test
+
+1. Click "Pending" stat card (shows 0)
+2. Run the SQL above
+3. Refresh page
+4. Now you'll see posts with approve/decline buttons!
+
+## The buttons are already there!
+They just only show for posts with Status = 'Pending'

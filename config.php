@@ -1,7 +1,7 @@
 <?php
 // config.php
-$host = "localhost";
-$db   = "findr";
+$host = "127.0.0.1";
+$db = "findr";
 $user = "root";      // change if you set a password
 $pass = "";          // set your password if not empty
 
