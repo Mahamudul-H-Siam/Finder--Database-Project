@@ -451,6 +451,7 @@ if ($role === 'Student') {
             <?php if ($role === 'Admin'): ?>
                 <a href="admin_manage_posts.php" style="color:#fbbf24">★ Manage Posts</a>
                 <a href="admin_manage_services.php" style="color:#fbbf24">★ Manage Services</a>
+                <a href="admin_manage_homes.php" style="color:#fbbf24">★ Manage Homes</a>
             <?php endif; ?>
 
             <a href="notifications.php" title="Notifications" class="nav-link-notif" style="position:relative;">
@@ -613,8 +614,60 @@ if ($role === 'Student') {
                 </div>
             <?php endif; ?>
 
-            <!-- ALL CATEGORIES / MODULES (HIDDEN FOR SERVICE PROVIDER & OWNER) -->
-            <?php if ($role === 'Student' || $role === 'Admin'): ?>
+            <?php if ($role === 'Admin'): ?>
+                <div class="section-header">🛡️ Admin Dashboard</div>
+                <div class="role-banner">
+                    <div class="stat-box">
+                        <div class="stat-lbl">Pending Items</div>
+                        <div class="stat-val" style="color:#fbbf24"><?php echo $pendingItemsCount; ?></div>
+                        <a href="admin_manage_posts.php?status=Pending" class="stat-link">Review Items →</a>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-lbl">Total Users</div>
+                        <div class="stat-val" style="color:#4ade80"><?php echo $totalUsersCount; ?></div>
+                        <a href="admin_portal.php" class="stat-link">View All →</a>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-lbl">Pending Providers</div>
+                        <div class="stat-val" style="color:#f43f5e"><?php echo $pendingProvidersCount; ?></div>
+                        <a href="admin_portal.php" class="stat-link">Approve Providers →</a>
+                    </div>
+                </div>
+
+                <div class="section-header" style="margin-top:2rem">⚡ Quick Actions</div>
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="c-icon">🛍️</div>
+                        <div class="c-title">Manage Posts</div>
+                        <div class="c-sub">Approve, decline, or delete marketplace items posted by students.</div>
+                        <a href="admin_manage_posts.php" class="c-btn" style="background:rgba(244,63,94,0.2); color:#f43f5e;">Manage Posts</a>
+                    </div>
+
+                    <div class="card">
+                        <div class="c-icon">🛠️</div>
+                        <div class="c-title">Manage Services</div>
+                        <div class="c-sub">Approve service providers and their individual service offerings.</div>
+                        <a href="admin_manage_services.php" class="c-btn" style="background:rgba(59,130,246,0.2); color:#60a5fa;">Manage Services</a>
+                    </div>
+
+                    <div class="card">
+                        <div class="c-icon">🏠</div>
+                        <div class="c-title">Manage Homes</div>
+                        <div class="c-sub">Review and approve room listings posted by homeowners.</div>
+                        <a href="admin_manage_homes.php" class="c-btn" style="background:rgba(34,197,94,0.2); color:#4ade80;">Manage Homes</a>
+                    </div>
+
+                    <div class="card">
+                        <div class="c-icon">👥</div>
+                        <div class="c-title">User Management</div>
+                        <div class="c-sub">View all users, block/unblock accounts, and manage permissions.</div>
+                        <a href="admin_portal.php" class="c-btn" style="background:rgba(139,92,246,0.2); color:#a78bfa;">Admin Portal</a>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- ALL CATEGORIES / MODULES (HIDDEN FOR SERVICE PROVIDER, OWNER & ADMIN) -->
+            <?php if ($role === 'Student'): ?>
                 <div class="section-header">🚀 Explore FindR</div>
                 <div class="card-grid">
                     <div class="card">

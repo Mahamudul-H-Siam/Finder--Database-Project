@@ -154,6 +154,50 @@ if (isset($_GET['unblock_user'])) {
     $stmt->close();
 }
 
+if (isset($_GET['approve_service'])) {
+    $serviceId = intval($_GET['approve_service']);
+    $stmt = $conn->prepare("UPDATE PROVIDER_SERVICES SET IsApproved = 1 WHERE ServiceID = ?");
+    $stmt->bind_param("i", $serviceId);
+    if ($stmt->execute()) {
+        // Fetch provider info for notification
+        $check = $conn->query("SELECT ps.ServiceType, sp.ProviderID FROM PROVIDER_SERVICES ps JOIN SERVICEPROVIDER sp ON ps.ProviderID = sp.ProviderID WHERE ps.ServiceID = $serviceId");
+        if ($row = $check->fetch_assoc()) {
+            $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, 'Service Approved', ?)");
+            $msg = "Your service '" . $row['ServiceType'] . "' is now live.";
+            $nStmt->bind_param("is", $row['ProviderID'], $msg);
+            $nStmt->execute();
+            $nStmt->close();
+        }
+        $message = "Service approved successfully!";
+        $messageType = "success";
+    }
+    $stmt->close();
+}
+
+if (isset($_GET['decline_service'])) {
+    $serviceId = intval($_GET['decline_service']);
+    // Fetch service info first
+    $check = $conn->query("SELECT ps.ServiceType, sp.ProviderID FROM PROVIDER_SERVICES ps JOIN SERVICEPROVIDER sp ON ps.ProviderID = sp.ProviderID WHERE ps.ServiceID = $serviceId");
+    if ($row = $check->fetch_assoc()) {
+        $providerId = $row['ProviderID'];
+        $serviceType = $row['ServiceType'];
+        
+        // Delete the service
+        $stmt = $conn->prepare("DELETE FROM PROVIDER_SERVICES WHERE ServiceID = ?");
+        $stmt->bind_param("i", $serviceId);
+        if ($stmt->execute()) {
+            $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, 'Service Declined', ?)");
+            $msg = "Your service '$serviceType' was declined.";
+            $nStmt->bind_param("is", $providerId, $msg);
+            $nStmt->execute();
+            $nStmt->close();
+            $message = "Service declined (deleted).";
+            $messageType = "warning";
+        }
+        $stmt->close();
+    }
+}
+
 // Redirect to clean URL after action
 if ($message) {
     $_SESSION['admin_message'] = $message;
@@ -218,6 +262,23 @@ $res = $conn->query("
 if ($res) {
     while ($row = $res->fetch_assoc()) {
         $pendingRooms[] = $row;
+    }
+}
+
+// Fetch Pending Services
+$pendingServices = [];
+$res = $conn->query("
+    SELECT ps.ServiceID, ps.ServiceType, ps.Description, ps.Price, ps.CreatedAt,
+           sp.BusinessName, sp.Area, u.FullName, u.Email
+    FROM PROVIDER_SERVICES ps
+    JOIN SERVICEPROVIDER sp ON ps.ProviderID = sp.ProviderID
+    JOIN USER u ON sp.ProviderID = u.UserID
+    WHERE ps.IsApproved = 0
+    ORDER BY ps.CreatedAt DESC
+");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $pendingServices[] = $row;
     }
 }
 
@@ -470,6 +531,10 @@ while ($row = $res->fetch_assoc()) {
                 <div class="stat-label">Pending Items</div>
                 <div class="stat-value"><?php echo count($pendingItems); ?></div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending Services</div>
+                <div class="stat-value"><?php echo count($pendingServices); ?></div>
+            </div>
         </div>
 
         <!-- Pending Rooms -->
@@ -606,6 +671,67 @@ while ($row = $res->fetch_assoc()) {
                                 </td>
                                 <td>
                                     <a href="?approve_sp=<?php echo $sp['ProviderID']; ?>" class="btn btn-green">✓ Approve</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </div>
+
+        <!-- Pending Services -->
+        <div class="card">
+            <h2>
+                🛠️ Pending Services
+                <?php if (count($pendingServices) > 0): ?>
+                    <span class="badge badge-warning"><?php echo count($pendingServices); ?> pending</span>
+                <?php endif; ?>
+            </h2>
+            <?php if (empty($pendingServices)): ?>
+                <div class="empty-state">
+                    <p>✓ No pending services at the moment.</p>
+                    <p style="font-size: 0.9rem; margin-top: 0.5rem;">When service providers add new services, they will appear here for approval.</p>
+                </div>
+            <?php else: ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Service Type</th>
+                            <th>Description</th>
+                            <th>Price</th>
+                            <th>Provider</th>
+                            <th>Business</th>
+                            <th>Posted</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingServices as $service): ?>
+                            <tr>
+                                <td><strong><?php echo htmlspecialchars($service['ServiceType']); ?></strong></td>
+                                <td class="item-desc" title="<?php echo htmlspecialchars($service['Description'] ?? 'No description'); ?>">
+                                    <?php echo htmlspecialchars(substr($service['Description'] ?? 'No description', 0, 50)); ?>...
+                                </td>
+                                <td>
+                                    <?php if ($service['Price'] > 0): ?>
+                                        BDT <?php echo number_format($service['Price']); ?>
+                                    <?php else: ?>
+                                        <span style="color:#64748b">Not set</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php echo htmlspecialchars($service['FullName']); ?><br>
+                                    <span class="timestamp"><?php echo htmlspecialchars($service['Email']); ?></span>
+                                </td>
+                                <td>
+                                    <?php echo htmlspecialchars($service['BusinessName']); ?><br>
+                                    <span class="timestamp"><?php echo htmlspecialchars($service['Area']); ?></span>
+                                </td>
+                                <td class="timestamp"><?php echo date('M d, h:i A', strtotime($service['CreatedAt'])); ?></td>
+                                <td>
+                                    <a href="?approve_service=<?php echo $service['ServiceID']; ?>" class="btn btn-green">✓ Approve</a>
+                                    <a href="?decline_service=<?php echo $service['ServiceID']; ?>" class="btn btn-red"
+                                        onclick="return confirm('Decline and delete this service?')">✗ Decline</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
