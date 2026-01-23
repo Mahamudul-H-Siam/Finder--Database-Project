@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             "INSERT INTO ROOMLISTING
              (OwnerID, ListingType, Title, Description, LocationArea, RentAmount,
               UtilitiesIncluded, GenderPreference, IsVerified)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)"
         );
         if (!$stmt) {
             die("Prepare failed: " . $conn->error);
@@ -192,7 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="subtitle">Create a listing so students can find your room or hostel bed.</div>
 
         <?php if ($success): ?>
-            <div class="success">Listing created successfully. You can see it in the Rooms section.</div>
+            <div class="success">Listing created successfully. It is pending admin approval.</div>
         <?php endif; ?>
 
         <?php foreach ($errors as $e): ?>

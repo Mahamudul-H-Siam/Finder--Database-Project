@@ -37,9 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
         $stmt->close();
 
         // Send notification
-        $notifStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, 'New Message', ?)");
+        $notifStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Type, Title, Message, Link) VALUES (?, 'Message', 'New Message', ?, ?)");
         $notifMsg = "You have a new message from " . $_SESSION['full_name'];
-        $notifStmt->bind_param("is", $otherUserId, $notifMsg);
+        $notifLink = "chat.php?user_id=" . $userId;
+        $notifStmt->bind_param("iss", $otherUserId, $notifMsg, $notifLink);
         $notifStmt->execute();
         $notifStmt->close();
 

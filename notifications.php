@@ -216,7 +216,14 @@ $stmt->close();
                 </div>
             <?php else: ?>
                 <?php foreach ($notifs as $n): ?>
-                    <div class="notif-item <?php echo $n['IsRead'] ? '' : 'unread'; ?>">
+                    <?php
+                    $link = !empty($n['Link']) ? $n['Link'] : '#';
+                    $isClickable = !empty($n['Link']);
+                    $onclick = $isClickable ? "onclick=\"markAndGo(event, " . $n['NotificationID'] . ", '" . $link . "')\"" : "";
+                    $cursorStyle = $isClickable ? "cursor:pointer;" : "";
+                    ?>
+                    <div class="notif-item <?php echo $n['IsRead'] ? '' : 'unread'; ?>" style="<?php echo $cursorStyle; ?>"
+                        <?php echo $onclick; ?>>
                         <div class="n-title">
                             <?php echo htmlspecialchars($n['Title']); ?>
                         </div>
@@ -228,7 +235,7 @@ $stmt->close();
                                 <?php echo date('M d, h:i A', strtotime($n['CreatedAt'])); ?>
                             </span>
                             <?php if (!$n['IsRead']): ?>
-                                <form method="POST" style="display:inline;">
+                                <form method="POST" style="display:inline;" onsubmit="event.stopPropagation();">
                                     <input type="hidden" name="mark_read" value="<?php echo $n['NotificationID']; ?>">
                                     <button type="submit" class="mark-read-btn">Mark as Read</button>
                                 </form>
@@ -238,6 +245,24 @@ $stmt->close();
                         </div>
                     </div>
                 <?php endforeach; ?>
+
+                <script>
+                    function markAndGo(e, id, url) {
+                        if (url === '#') return;
+                        // Send request to mark as read then redirect
+                        e.preventDefault();
+
+                        const formData = new FormData();
+                        formData.append('mark_read', id);
+
+                        fetch('notifications.php', {
+                            method: 'POST',
+                            body: formData
+                        }).then(() => {
+                            window.location.href = url;
+                        });
+                    }
+                </script>
             <?php endif; ?>
         </div>
     </div>

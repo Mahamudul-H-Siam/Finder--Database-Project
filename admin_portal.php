@@ -81,6 +81,76 @@ if (isset($_GET['delete_user'])) {
         $message = "User deleted successfully!";
         $messageType = "success";
     }
+    if ($stmt->execute()) {
+        $message = "User deleted successfully!";
+        $messageType = "success";
+    }
+    $stmt->close();
+}
+
+if (isset($_GET['approve_room'])) {
+    $roomId = intval($_GET['approve_room']);
+    $stmt = $conn->prepare("UPDATE ROOMLISTING SET IsVerified = 1 WHERE RoomID = ?");
+    $stmt->bind_param("i", $roomId);
+    if ($stmt->execute()) {
+        // Fetch Owner ID for notification
+        $check = $conn->query("SELECT OwnerID, Title FROM ROOMLISTING WHERE RoomID = $roomId");
+        if ($row = $check->fetch_assoc()) {
+            $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, 'Room Listed', ?)");
+            $msg = "Your room listing '{$row['Title']}' has been approved and is now visible.";
+            $nStmt->bind_param("is", $row['OwnerID'], $msg);
+            $nStmt->execute();
+        }
+        $message = "Room listing approved successfully!";
+        $messageType = "success";
+    }
+    $stmt->close();
+}
+
+if (isset($_GET['decline_room'])) {
+    $roomId = intval($_GET['decline_room']);
+    // Fetch Owner ID first
+    $check = $conn->query("SELECT OwnerID, Title FROM ROOMLISTING WHERE RoomID = $roomId");
+    if ($row = $check->fetch_assoc()) {
+        $ownerId = $row['OwnerID'];
+        $title = $row['Title'];
+        // Rejecting usually implies deleting or setting to a 'Rejected' status.
+        // For simplicity, let's delete it or add a 'Rejected' status to ENUM? 
+        // ENUM is 'Available','Booked','Closed'. Let's set IsVerified=0 (keep pending) or delete.
+        // User request changes implied restricted/blocked. Let's Delete for clean decline.
+        $stmt = $conn->prepare("DELETE FROM ROOMLISTING WHERE RoomID = ?");
+        $stmt->bind_param("i", $roomId);
+        if ($stmt->execute()) {
+            $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, 'Room Declined', ?)");
+            $msg = "Your listing '$title' was declined.";
+            $nStmt->bind_param("is", $ownerId, $msg);
+            $nStmt->execute();
+            $message = "Room listing declined (deleted).";
+            $messageType = "warning";
+        }
+        $stmt->close();
+    }
+}
+
+if (isset($_GET['block_user'])) {
+    $uid = intval($_GET['block_user']);
+    $stmt = $conn->prepare("UPDATE USER SET Status = 'Blocked' WHERE UserID = ? AND Role != 'Admin'");
+    $stmt->bind_param("i", $uid);
+    if ($stmt->execute()) {
+        $message = "User blocked successfully.";
+        $messageType = "warning";
+    }
+    $stmt->close();
+}
+
+if (isset($_GET['unblock_user'])) {
+    $uid = intval($_GET['unblock_user']);
+    $stmt = $conn->prepare("UPDATE USER SET Status = 'Active' WHERE UserID = ?");
+    $stmt->bind_param("i", $uid);
+    if ($stmt->execute()) {
+        $message = "User unblocked successfully.";
+        $messageType = "success";
+    }
     $stmt->close();
 }
 
@@ -136,9 +206,29 @@ if ($res) {
     }
 }
 
+// Fetch Pending Rooms
+$pendingRooms = [];
+$res = $conn->query("
+    SELECT r.RoomID, r.Title, r.RentAmount, r.LocationArea, r.ListingType, r.CreatedAt, u.FullName 
+    FROM ROOMLISTING r
+    JOIN USER u ON r.OwnerID = u.UserID
+    WHERE r.IsVerified = 0
+    ORDER BY r.CreatedAt DESC
+");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $pendingRooms[] = $row;
+    }
+}
+
 // Fetch Recent Users
 $users = [];
-$res = $conn->query("SELECT UserID, FullName, Email, Role, Status, CreatedAt FROM USER ORDER BY CreatedAt DESC LIMIT 20");
+$res = $conn->query("
+    SELECT u.UserID, u.FullName, u.Email, u.Role, u.Status, u.CreatedAt,
+    (SELECT COUNT(*) FROM ROOMLISTING r WHERE r.OwnerID = u.UserID) as PostCount
+    FROM USER u 
+    ORDER BY u.CreatedAt DESC LIMIT 20
+");
 while ($row = $res->fetch_assoc()) {
     $users[] = $row;
 }
@@ -373,9 +463,57 @@ while ($row = $res->fetch_assoc()) {
                 </div>
             <?php endforeach; ?>
             <div class="stat-card">
+                <div class="stat-label">Pending Rooms</div>
+                <div class="stat-value"><?php echo count($pendingRooms); ?></div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-label">Pending Items</div>
                 <div class="stat-value"><?php echo count($pendingItems); ?></div>
             </div>
+        </div>
+
+        <!-- Pending Rooms -->
+        <div class="card">
+            <h2>
+                🏠 Pending Room Listings
+                <?php if (count($pendingRooms) > 0): ?>
+                    <span class="badge badge-warning"><?php echo count($pendingRooms); ?> pending</span>
+                <?php endif; ?>
+            </h2>
+            <?php if (empty($pendingRooms)): ?>
+                <div class="empty-state">
+                    <p>✓ No pending room approvals.</p>
+                </div>
+            <?php else: ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Location</th>
+                            <th>Rent</th>
+                            <th>Owner</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($pendingRooms as $room): ?>
+                            <tr>
+                                <td><strong><?php echo htmlspecialchars($room['Title']); ?></strong></td>
+                                <td><?php echo htmlspecialchars($room['ListingType']); ?></td>
+                                <td><?php echo htmlspecialchars($room['LocationArea']); ?></td>
+                                <td>BDT <?php echo number_format($room['RentAmount']); ?></td>
+                                <td><?php echo htmlspecialchars($room['FullName']); ?></td>
+                                <td>
+                                    <a href="?approve_room=<?php echo $room['RoomID']; ?>" class="btn btn-green">✓ Approve</a>
+                                    <a href="?decline_room=<?php echo $room['RoomID']; ?>" class="btn btn-red"
+                                        onclick="return confirm('Decline and delete this listing?')">✗ Decline</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         </div>
 
         <!-- Pending Marketplace Items -->
@@ -389,7 +527,8 @@ while ($row = $res->fetch_assoc()) {
             <?php if (empty($pendingItems)): ?>
                 <div class="empty-state">
                     <p>✓ No pending items at the moment.</p>
-                    <p style="font-size: 0.9rem; margin-top: 0.5rem;">When students post items to the marketplace, they will appear here for approval.</p>
+                    <p style="font-size: 0.9rem; margin-top: 0.5rem;">When students post items to the marketplace, they will
+                        appear here for approval.</p>
                 </div>
             <?php else: ?>
                 <table>
@@ -485,6 +624,7 @@ while ($row = $res->fetch_assoc()) {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th>Posts</th>
                         <th>Joined</th>
                         <th>Action</th>
                     </tr>
@@ -496,11 +636,21 @@ while ($row = $res->fetch_assoc()) {
                             <td><?php echo htmlspecialchars($u['FullName']); ?></td>
                             <td><?php echo htmlspecialchars($u['Email']); ?></td>
                             <td><?php echo $u['Role']; ?></td>
+                            <td style="text-align:center; font-weight:bold; color:#fbbf24;"><?php echo $u['PostCount']; ?>
+                            </td>
                             <td class="timestamp"><?php echo date('M j, Y', strtotime($u['CreatedAt'])); ?></td>
                             <td>
                                 <?php if ($u['Role'] !== 'Admin'): ?>
+                                    <?php if ($u['Status'] === 'Blocked'): ?>
+                                        <a href="?unblock_user=<?php echo $u['UserID']; ?>" class="btn"
+                                            style="background:#fbbf24; color:#451a03">Unblock</a>
+                                    <?php else: ?>
+                                        <a href="?block_user=<?php echo $u['UserID']; ?>" class="btn"
+                                            style="background:#f97316; color:white"
+                                            onclick="return confirm('Block this user?')">Block</a>
+                                    <?php endif; ?>
                                     <a href="?delete_user=<?php echo $u['UserID']; ?>" class="btn btn-red"
-                                        onclick="return confirm('Are you sure?');">Delete</a>
+                                        onclick="return confirm('Are you sure you want to PERMANENTLY delete this user?');">Delete</a>
                                 <?php endif; ?>
                             </td>
                         </tr>

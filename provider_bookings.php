@@ -29,16 +29,27 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             $newStatus = 'Confirmed';
         if ($action === 'cancel')
             $newStatus = 'Cancelled';
+        if ($action === 'complete')
+            $newStatus = 'Completed';
 
         if ($newStatus) {
             $stmt = $conn->prepare("UPDATE SERVICEBOOKING SET BookingStatus = ? WHERE BookingID = ?");
             $stmt->bind_param("si", $newStatus, $bookingId);
             if ($stmt->execute()) {
-                // Send Notification
+                // Send Notification with clickable link for completed bookings
                 $notifTitle = "Booking " . $newStatus;
                 $notifMsg = "Your booking for '$serviceType' has been $newStatus.";
-                $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, ?, ?)");
-                $nStmt->bind_param("iss", $clientId, $notifTitle, $notifMsg);
+
+                // Add link to review page if booking is completed
+                if ($newStatus === 'Completed') {
+                    $reviewLink = "rate_service.php?booking_id=" . $bookingId;
+                    $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message, Link) VALUES (?, ?, ?, ?)");
+                    $nStmt->bind_param("isss", $clientId, $notifTitle, $notifMsg, $reviewLink);
+                } else {
+                    $nStmt = $conn->prepare("INSERT INTO NOTIFICATION (UserID, Title, Message) VALUES (?, ?, ?)");
+                    $nStmt->bind_param("iss", $clientId, $notifTitle, $notifMsg);
+                }
+
                 $nStmt->execute();
                 $nStmt->close();
             }
@@ -228,6 +239,9 @@ $stmt->close();
                         <?php if ($b['BookingStatus'] === 'Requested'): ?>
                             <a href="?action=confirm&id=<?php echo $b['BookingID']; ?>" class="btn btn-confirm">Confirm</a>
                             <a href="?action=cancel&id=<?php echo $b['BookingID']; ?>" class="btn btn-cancel">Decline</a>
+                        <?php elseif ($b['BookingStatus'] === 'Confirmed'): ?>
+                            <a href="?action=complete&id=<?php echo $b['BookingID']; ?>" class="btn btn-primary"
+                                style="background:#3b82f6; color:white;">Mark Complete</a>
                         <?php endif; ?>
                     </div>
                 </div>

@@ -19,8 +19,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $serviceType = $_POST['service_type'] ?? '';
     $area = trim($_POST['area'] ?? '');
 
+    // Admin passkey field
+    $adminPasskey = trim($_POST['admin_passkey'] ?? '');
+
     if ($password !== $password2) {
         $errors[] = "Passwords do not match.";
+    }
+
+    // Validate admin passkey
+    if ($role === 'Admin') {
+        if (empty($adminPasskey)) {
+            $errors[] = "Admin passkey is required to create an admin account.";
+        } elseif ($adminPasskey !== ADMIN_SECRET_PASSKEY) {
+            $errors[] = "Invalid admin passkey. You cannot create an admin account.";
+        }
     }
 
     if ($role === 'ServiceProvider' && (empty($businessName) || empty($serviceType) || empty($area))) {
@@ -223,17 +235,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <script>
         function toggleServiceFields() {
             const role = document.getElementById('role').value;
-            const fields = document.getElementById('serviceFields');
+            const serviceFields = document.getElementById('serviceFields');
+            const adminFields = document.getElementById('adminFields');
+            
+            // Toggle Service Provider fields
             if (role === 'ServiceProvider') {
-                fields.classList.remove('hidden');
+                serviceFields.classList.remove('hidden');
                 document.getElementById('business_name').required = true;
                 document.getElementById('service_type').required = true;
                 document.getElementById('area').required = true;
             } else {
-                fields.classList.add('hidden');
+                serviceFields.classList.add('hidden');
                 document.getElementById('business_name').required = false;
                 document.getElementById('service_type').required = false;
                 document.getElementById('area').required = false;
+            }
+            
+            // Toggle Admin passkey field
+            if (role === 'Admin') {
+                adminFields.classList.remove('hidden');
+                document.getElementById('admin_passkey').required = true;
+            } else {
+                adminFields.classList.add('hidden');
+                document.getElementById('admin_passkey').required = false;
             }
         }
     </script>
@@ -326,6 +350,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div>
                             <label>Area</label>
                             <input type="text" name="area" id="area" placeholder="e.g. Dhanmondi">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Passkey Field -->
+                <div id="adminFields" class="hidden">
+                    <div class="section-break">⚠️ Admin Verification Required</div>
+                    <div>
+                        <label>Admin Secret Passkey</label>
+                        <input type="password" name="admin_passkey" id="admin_passkey" 
+                               placeholder="Enter the secret admin passkey">
+                        <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #facc15;">
+                            🔒 Only authorized personnel with the admin passkey can create admin accounts.
                         </div>
                     </div>
                 </div>

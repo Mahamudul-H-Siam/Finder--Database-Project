@@ -9,9 +9,9 @@ if (!isset($_SESSION['user_id'])) {
 $search = isset($_GET['q']) ? trim($_GET['q']) : '';
 $serviceType = isset($_GET['type']) ? $_GET['type'] : 'All';
 
-// Basic query parts
+// Basic query parts - Updated to work with PROVIDER_SERVICES
 $whereMy = "WHERE sp.ProviderID = ?";
-$whereOther = "WHERE sp.ProviderID != ? AND u.Status = 'Active' AND sp.IsApproved = 1";
+$whereOther = "WHERE sp.ProviderID != ? AND u.Status = 'Active' AND sp.IsApproved = 1 AND ps.IsApproved = 1 AND ps.IsActive = 1";
 $paramsMy = [$_SESSION['user_id']];
 $typesMy = "i";
 $paramsOther = [$_SESSION['user_id']];
@@ -20,14 +20,15 @@ $typesOther = "i";
 function applyServiceFilters(&$where, &$types, &$params, $filters)
 {
     if ($filters['serviceType'] !== 'All') {
-        $where .= " AND sp.ServiceType = ?";
+        $where .= " AND ps.ServiceType = ?";
         $types .= "s";
         $params[] = $filters['serviceType'];
     }
     if ($filters['search'] !== '') {
-        $where .= " AND (sp.BusinessName LIKE ? OR sp.Area LIKE ?)";
-        $types .= "ss";
+        $where .= " AND (sp.BusinessName LIKE ? OR sp.Area LIKE ? OR ps.Description LIKE ?)";
+        $types .= "sss";
         $like = "%" . $filters['search'] . "%";
+        $params[] = $like;
         $params[] = $like;
         $params[] = $like;
     }
@@ -37,15 +38,19 @@ $filters = ['serviceType' => $serviceType, 'search' => $search];
 applyServiceFilters($whereMy, $typesMy, $paramsMy, $filters);
 applyServiceFilters($whereOther, $typesOther, $paramsOther, $filters);
 
-// Query My Services
+// Query My Services - Updated to work with PROVIDER_SERVICES table
 $sqlMy = "
-    SELECT sp.ProviderID, sp.ServiceType, sp.BusinessName, sp.Area, sp.AverageRating, sp.TotalReviews, sp.IsApproved, sp.Description, sp.StartingPrice, u.FullName
+    SELECT sp.ProviderID, ps.ServiceType, sp.BusinessName, sp.Area, sp.AverageRating, sp.TotalReviews, sp.IsApproved, u.FullName
     FROM SERVICEPROVIDER sp
     JOIN USER u ON sp.ProviderID = u.UserID
+    LEFT JOIN PROVIDER_SERVICES ps ON sp.ProviderID = ps.ProviderID AND ps.IsActive = 1
     $whereMy
     ORDER BY sp.AverageRating DESC
 ";
 $stmtMy = $conn->prepare($sqlMy);
+if (!$stmtMy) {
+    die("Prepare failed (My Services): " . $conn->error . "<br>Query: " . $sqlMy);
+}
 if ($typesMy) {
     $stmtMy->bind_param($typesMy, ...$paramsMy);
 }
@@ -55,14 +60,19 @@ $stmtMy->close();
 
 // Query Other Services
 $sqlOther = "
-    SELECT sp.ProviderID, sp.ServiceType, sp.BusinessName, sp.Area, sp.AverageRating, sp.TotalReviews, sp.Description, sp.StartingPrice, u.FullName
-    FROM SERVICEPROVIDER sp
+    SELECT ps.ServiceID, ps.ProviderID, ps.ServiceType, ps.Description, ps.Price, 
+           sp.BusinessName, sp.Area, sp.AverageRating, sp.TotalReviews, u.FullName
+    FROM PROVIDER_SERVICES ps
+    JOIN SERVICEPROVIDER sp ON ps.ProviderID = sp.ProviderID
     JOIN USER u ON sp.ProviderID = u.UserID
     $whereOther
     ORDER BY sp.AverageRating DESC
 ";
 $stmtOther = $conn->prepare($sqlOther);
 if ($typesOther) {
+    if (!$stmtOther) {
+        die("Prepare failed: " . $conn->error);
+    }
     $stmtOther->bind_param($typesOther, ...$paramsOther);
 }
 $stmtOther->execute();
@@ -364,18 +374,14 @@ $stmtOther->close();
                             <span><?php echo $row['TotalReviews']; ?> reviews</span>
                         </div>
 
-                        <?php if (!empty($row['Description'])): ?>
-                            <div style="font-size:0.85rem; color:#cbd5e1; margin-bottom:0.8rem; line-height:1.4;">
-                                <?php echo nl2br(htmlspecialchars(substr($row['Description'], 0, 100))); ?>...
-                            </div>
-                        <?php endif; ?>
 
-                        <?php if ($row['StartingPrice'] > 0): ?>
-                            <div style="font-weight:700; color:#4ade80; margin-bottom:1rem;">
-                                Starts from BDT <?php echo number_format($row['StartingPrice'], 0); ?>
-                            </div>
-                        <?php endif; ?>
-                        <a href="service_book.php?provider_id=<?php echo $row['ProviderID']; ?>" class="btn-book">Book Now</a>
+
+                        <div style="display:flex; gap:0.5rem; margin-top:auto;">
+                            <a href="chat.php?user_id=<?php echo $row['ProviderID']; ?>" class="btn-book"
+                                style="flex:1; background:#334155; color:white;">Message</a>
+                            <a href="service_book.php?service_id=<?php echo $row['ServiceID']; ?>" class="btn-book"
+                                style="flex:1;">Book Now</a>
+                        </div>
                     </div>
                 <?php endwhile; ?>
             </div>

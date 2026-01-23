@@ -10,5 +10,9 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+// Admin Registration Security
+// IMPORTANT: Change this passkey to your own secret code!
+define('ADMIN_SECRET_PASSKEY', 'siam valo chele');
+
 session_start();
 ?>

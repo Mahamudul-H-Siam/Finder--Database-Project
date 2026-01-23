@@ -412,9 +412,7 @@ $bStmt->close();
                                 <span class="l-icon">🎭</span> Mood Tracker
                             </a>
                         <?php endif; ?>
-                        <a href="marketplace_list.php" class="link-item">
-                            <span class="l-icon">🛍️</span> My Marketplace Items
-                        </a>
+
                         <a href="notifications.php" class="link-item">
                             <span class="l-icon">🔔</span> Notifications
                         </a>

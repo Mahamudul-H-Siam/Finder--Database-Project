@@ -89,25 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->close();
     }
 
-    // Edit Post
-    if (isset($_POST['edit_post'])) {
-        $itemId = intval($_POST['item_id']);
-        $title = trim($_POST['title']);
-        $description = trim($_POST['description']);
-        $category = $_POST['category'];
-        $price = (float) $_POST['price'];
-        $condition = $_POST['condition'];
-        $status = $_POST['status'];
 
-        $stmt = $conn->prepare("UPDATE MARKETITEM SET Title = ?, Description = ?, Category = ?, Price = ?, `Condition` = ?, Status = ? WHERE ItemID = ?");
-        $stmt->bind_param("sssdssi", $title, $description, $category, $price, $condition, $status, $itemId);
-
-        if ($stmt->execute()) {
-            $message = "Post updated!";
-            $messageType = "success";
-        }
-        $stmt->close();
-    }
 }
 
 // Fetch filter parameters
@@ -638,8 +620,7 @@ while ($row = $countResult->fetch_assoc()) {
                                         Decline</button>
                                 </form>
                             <?php endif; ?>
-                            <button class="btn btn-primary" style="width: 100%;"
-                                onclick='openEditModal(<?php echo json_encode($post); ?>)'>✎ Edit</button>
+
                             <form method="POST" style="margin: 0;" onsubmit="return confirm('Delete this post?');">
                                 <input type="hidden" name="item_id" value="<?php echo $post['ItemID']; ?>">
                                 <button type="submit" name="delete_post" class="btn btn-danger" style="width: 100%;">🗑
@@ -707,62 +688,7 @@ while ($row = $countResult->fetch_assoc()) {
         </div>
     </div>
 
-    <!-- Edit Post Modal -->
-    <div id="editModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Edit Post</h2>
-                <button class="close-modal" onclick="closeEditModal()">×</button>
-            </div>
-            <form method="POST" id="editForm">
-                <input type="hidden" name="item_id" id="edit_item_id">
-                <div class="form-group">
-                    <label>Title</label>
-                    <input type="text" name="title" id="edit_title" required>
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea name="description" id="edit_description" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label>Category</label>
-                    <select name="category" id="edit_category" required>
-                        <option value="Electronics">Electronics</option>
-                        <option value="Furniture">Furniture</option>
-                        <option value="Books">Books</option>
-                        <option value="Clothing">Clothing</option>
-                        <option value="Sports">Sports</option>
-                        <option value="Others">Others</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Price (BDT)</label>
-                    <input type="number" step="0.01" name="price" id="edit_price" required>
-                </div>
-                <div class="form-group">
-                    <label>Condition</label>
-                    <select name="condition" id="edit_condition" required>
-                        <option value="New">New</option>
-                        <option value="LikeNew">Like New</option>
-                        <option value="Used">Used</option>
-                        <option value="VeryUsed">Very Used</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Status</label>
-                    <select name="status" id="edit_status" required>
-                        <option value="Available">Available</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Declined">Declined</option>
-                    </select>
-                </div>
-                <div class="form-actions">
-                    <button type="submit" name="edit_post" class="btn btn-success">Update Post</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
+
 
     <script>
         function openCreateModal() {
@@ -773,20 +699,7 @@ while ($row = $countResult->fetch_assoc()) {
             document.getElementById('createModal').classList.remove('active');
         }
 
-        function openEditModal(post) {
-            document.getElementById('edit_item_id').value = post.ItemID;
-            document.getElementById('edit_title').value = post.Title;
-            document.getElementById('edit_description').value = post.Description;
-            document.getElementById('edit_category').value = post.Category;
-            document.getElementById('edit_price').value = post.Price;
-            document.getElementById('edit_condition').value = post.Condition;
-            document.getElementById('edit_status').value = post.Status;
-            document.getElementById('editModal').classList.add('active');
-        }
 
-        function closeEditModal() {
-            document.getElementById('editModal').classList.remove('active');
-        }
 
         // Close modals on outside click
         window.onclick = function (event) {

@@ -28,13 +28,13 @@ if ($role === 'Student') {
     $stmt->close();
 
     // Service Bookings
-    $stmt = $conn->prepare("SELECT sb.BookingStatus, sb.Date, sp.BusinessName, sb.ServiceType FROM SERVICEBOOKING sb JOIN SERVICEPROVIDER sp ON sb.ProviderID = sp.ProviderID WHERE sb.UserID = ? ORDER BY sb.Date DESC LIMIT 3");
+    $stmt = $conn->prepare("SELECT sb.BookingID, sb.BookingStatus, sb.Date, sp.BusinessName, sb.ServiceType FROM SERVICEBOOKING sb JOIN SERVICEPROVIDER sp ON sb.ProviderID = sp.ProviderID WHERE sb.UserID = ? ORDER BY sb.Date DESC LIMIT 3");
     $stmt->bind_param("i", $userId);
     $stmt->execute();
     $myServiceBookings = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
 
-    // Budget Alert (Check if any category is > 90%)
+    // Budget Alert
     $startDate = date('Y-m-01');
     $endDate = date('Y-m-t');
     $stmt = $conn->prepare("
@@ -77,6 +77,7 @@ if ($role === 'Owner') {
 $pendingJobsCount = 0;
 $avgRating = 0;
 $totalReviews = 0;
+$activeServicesCount = 0;
 
 if ($role === 'ServiceProvider') {
     // Pending Jobs
@@ -94,6 +95,16 @@ if ($role === 'ServiceProvider') {
     $stmt->bind_result($avgRating, $totalReviews);
     $stmt->fetch();
     $stmt->close();
+
+    // Active Services Count
+    $stmt = $conn->prepare("SELECT COUNT(*) FROM PROVIDER_SERVICES WHERE ProviderID = ? AND IsActive = 1");
+    if ($stmt) {
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $stmt->bind_result($activeServicesCount);
+        $stmt->fetch();
+        $stmt->close();
+    }
 }
 
 // 4. ADMIN DATA
@@ -102,21 +113,18 @@ $totalUsersCount = 0;
 $pendingProvidersCount = 0;
 
 if ($role === 'Admin') {
-    // Pending Marketplace Items
     $stmt = $conn->prepare("SELECT COUNT(*) FROM MARKETITEM WHERE Status = 'Pending'");
     $stmt->execute();
     $stmt->bind_result($pendingItemsCount);
     $stmt->fetch();
     $stmt->close();
 
-    // Total Users
     $stmt = $conn->prepare("SELECT COUNT(*) FROM USER");
     $stmt->execute();
     $stmt->bind_result($totalUsersCount);
     $stmt->fetch();
     $stmt->close();
 
-    // Pending Service Providers
     $stmt = $conn->prepare("SELECT COUNT(*) FROM SERVICEPROVIDER WHERE IsApproved = 0");
     $stmt->execute();
     $stmt->bind_result($pendingProvidersCount);
@@ -125,33 +133,29 @@ if ($role === 'Admin') {
 }
 
 // --- GENERAL DATA (Recent Rooms, Mood, etc) ---
-$recentRooms = [];
-$stmt = $conn->prepare("SELECT Title, LocationArea, RentAmount FROM ROOMLISTING WHERE Status = 'Available' AND IsVerified = 1 ORDER BY CreatedAt DESC LIMIT 3");
-$stmt->execute();
-$recentRooms = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
-
-// Budget Overview (For Chart/List)
+// Only for students/others, not needed for providers if simplified
 $budgetSummary = [];
-$startDate = date('Y-m-01');
-$endDate = date('Y-m-t');
-$stmt = $conn->prepare("SELECT bc.Name, bc.MonthlyLimit, COALESCE(SUM(bt.Amount),0) as Spent FROM BUDGETCATEGORY bc LEFT JOIN BUDGETTRANSACTION bt ON bc.CategoryID = bt.CategoryID AND bt.Type='Expense' AND bt.Date BETWEEN ? AND ? WHERE bc.UserID = ? GROUP BY bc.CategoryID LIMIT 4");
-$stmt->bind_param("ssi", $startDate, $endDate, $userId);
-$stmt->execute();
-$budgetSummary = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-$stmt->close();
-
-// Fetch Latest Mood
-$moodHistory = [];
-// Use a try-catch or simple check to avoid fatal error if column missing
-$stmt = $conn->prepare("SELECT MoodLevel, MoodLabel, Note, CreatedAt FROM MOODENTRY WHERE UserID = ? ORDER BY CreatedAt DESC LIMIT 1");
-if ($stmt) {
-    $stmt->bind_param("i", $userId);
+if ($role === 'Student') {
+    $startDate = date('Y-m-01');
+    $endDate = date('Y-m-t');
+    $stmt = $conn->prepare("SELECT bc.Name, bc.MonthlyLimit, COALESCE(SUM(bt.Amount),0) as Spent FROM BUDGETCATEGORY bc LEFT JOIN BUDGETTRANSACTION bt ON bc.CategoryID = bt.CategoryID AND bt.Type='Expense' AND bt.Date BETWEEN ? AND ? WHERE bc.UserID = ? GROUP BY bc.CategoryID LIMIT 4");
+    $stmt->bind_param("ssi", $startDate, $endDate, $userId);
     $stmt->execute();
-    $res = $stmt->get_result();
-    if ($row = $res->fetch_assoc())
-        $moodHistory[] = $row;
+    $budgetSummary = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
+}
+
+$moodHistory = [];
+if ($role === 'Student') {
+    $stmt = $conn->prepare("SELECT MoodLevel, MoodLabel, Note, CreatedAt FROM MOODENTRY WHERE UserID = ? ORDER BY CreatedAt DESC LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        if ($row = $res->fetch_assoc())
+            $moodHistory[] = $row;
+        $stmt->close();
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -445,13 +449,54 @@ if ($stmt) {
         <div class="brand">FindR</div>
         <div class="nav-right">
             <?php if ($role === 'Admin'): ?>
-                <a href="admin_manage_posts.php" style="color:#fbbf24">★ Admin Panel</a>
+                <a href="admin_manage_posts.php" style="color:#fbbf24">★ Manage Posts</a>
+                <a href="admin_manage_services.php" style="color:#fbbf24">★ Manage Services</a>
             <?php endif; ?>
-            <a href="notifications.php" title="Notifications">🔔 Alerts</a>
+
+            <a href="notifications.php" title="Notifications" class="nav-link-notif" style="position:relative;">
+                🔔 Alerts
+                <span id="notif-badge" style="
+                    display:none;
+                    position:absolute;
+                    top:-5px;
+                    right:-8px;
+                    background:#ef4444;
+                    color:white;
+                    font-size:0.7rem;
+                    padding:2px 6px;
+                    border-radius:99px;
+                    border:2px solid #0f172a;
+                    font-weight:700;
+                ">0</span>
+            </a>
+
+            <a href="messages.php" title="Messages">💬 Messages</a>
             <a href="profile.php" title="Profile">👤 Profile</a>
             <a href="logout.php" class="btn-logout">Logout</a>
         </div>
     </nav>
+
+    <script>
+        function updateNotifCount() {
+            fetch('api_notifications.php')
+                .then(res => res.json())
+                .then(data => {
+                    const badge = document.getElementById('notif-badge');
+                    if (data.count > 0) {
+                        badge.style.display = 'block';
+                        badge.innerText = data.count > 9 ? '9+' : data.count;
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(err => console.error(err));
+        }
+
+        // Check every 10 seconds
+        setInterval(updateNotifCount, 10000);
+        // Check immediately
+        updateNotifCount();
+    </script>
 
     <div class="hero">
         <div class="welcome">
@@ -519,6 +564,10 @@ if ($stmt) {
                                         class="status <?php echo ($bk['BookingStatus'] == 'Confirmed' ? 'st-green' : 'st-yellow'); ?>">
                                         <?php echo ($bk['BookingStatus'] == 'Pending' ? 'Processing' : $bk['BookingStatus']); ?>
                                     </div>
+                                    <?php if ($bk['BookingStatus'] === 'Completed'): ?>
+                                        <a href="rate_service.php?booking_id=<?php echo $bk['BookingID']; ?>"
+                                            style="font-size:0.75rem; background:#fbbf24; color:#451a03; padding:0.2rem 0.5rem; border-radius:4px; text-decoration:none; margin-left:0.5rem;">Rate</a>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         <?php endif; ?>
@@ -552,93 +601,94 @@ if ($stmt) {
                         <a href="provider_bookings.php" class="stat-link">Manage Jobs →</a>
                     </div>
                     <div class="stat-box">
+                        <div class="stat-lbl">Active Services</div>
+                        <div class="stat-val" style="color:#4ade80"><?php echo $activeServicesCount; ?></div>
+                        <a href="service_add.php" class="stat-link">Manage Services →</a>
+                    </div>
+                    <div class="stat-box">
                         <div class="stat-lbl">Average Rating</div>
                         <div class="stat-val" style="color:#f43f5e">★ <?php echo number_format($avgRating, 1); ?></div>
                         <div class="li-sub"><?php echo $totalReviews; ?> reviews</div>
                     </div>
-                    <!-- NEW: Link to Edit Profile/Post -->
-                    <div class="stat-box" style="justify-content:center; align-items:center; text-align:center;">
-                        <a href="service_add.php" class="c-btn" style="background:#22c55e; width:100%;">Update Service
-                            Info</a>
-                        <div style="font-size:0.8rem; color:#94a3b8; margin-top:0.5rem;">Edit description & price</div>
-                    </div>
                 </div>
             <?php endif; ?>
 
-            <!-- ALL CATEGORIES / MODULES -->
-            <div class="section-header">🚀 Explore FindR</div>
-            <div class="card-grid">
-                <div class="card">
-                    <div class="c-title">🏠 Rooms & Housing</div>
-                    <div class="c-sub">Find availabl rooms and hostel beds near you.</div>
-                    <a href="room_list.php" class="c-btn" style="background:rgba(59,130,246,0.2); color:#60a5fa;">Browse
-                        Rooms</a>
-                </div>
+            <!-- ALL CATEGORIES / MODULES (HIDDEN FOR SERVICE PROVIDER & OWNER) -->
+            <?php if ($role === 'Student' || $role === 'Admin'): ?>
+                <div class="section-header">🚀 Explore FindR</div>
+                <div class="card-grid">
+                    <div class="card">
+                        <div class="c-title">🏠 Rooms & Housing</div>
+                        <div class="c-sub">Find availabl rooms and hostel beds near you.</div>
+                        <a href="room_list.php" class="c-btn" style="background:rgba(59,130,246,0.2); color:#60a5fa;">Browse
+                            Rooms</a>
+                    </div>
 
-                <div class="card">
-                    <div class="c-title">🛍️ Marketplace</div>
-                    <div class="c-sub">Buy and sell furniture, books, and gadgets.</div>
-                    <a href="marketplace_list.php" class="c-btn"
-                        style="background:rgba(244,63,94,0.2); color:#f43f5e;">Go to Market</a>
-                </div>
+                    <div class="card">
+                        <div class="c-title">🛍️ Marketplace</div>
+                        <div class="c-sub">Buy and sell furniture, books, and gadgets.</div>
+                        <a href="marketplace_list.php" class="c-btn"
+                            style="background:rgba(244,63,94,0.2); color:#f43f5e;">Go to Market</a>
+                    </div>
 
-                <div class="card">
-                    <div class="c-title">🛠️ Services</div>
-                    <div class="c-sub">Book cleaners, vans, and tutors easily.</div>
-                    <a href="service_list.php" class="c-btn" style="background:rgba(34,197,94,0.2); color:#4ade80;">Find
-                        Services</a>
-                </div>
+                    <div class="card">
+                        <div class="c-title">🛠️ Services</div>
+                        <div class="c-sub">Book cleaners, vans, and tutors easily.</div>
+                        <a href="service_list.php" class="c-btn" style="background:rgba(34,197,94,0.2); color:#4ade80;">Find
+                            Services</a>
+                    </div>
 
-                <div class="card">
-                    <div class="c-title">🚌 Utilities</div>
-                    <div class="c-sub">Check bus routes, ticket prices, and lost & found.</div>
-                    <div style="margin-top:auto; display:flex; gap:0.5rem; flex-wrap:wrap;">
-                        <a href="utilities.php" class="c-btn"
-                            style="font-size:0.75rem; padding:0.3rem 0.6rem;">Bus/Prices</a>
-                        <a href="lostfound_list.php" class="c-btn"
-                            style="font-size:0.75rem; padding:0.3rem 0.6rem;">Lost&Found</a>
-                        <a href="meal_list.php" class="c-btn"
-                            style="font-size:0.75rem; padding:0.3rem 0.6rem;">Meals</a>
+                    <div class="card">
+                        <div class="c-title">🚌 Utilities</div>
+                        <div class="c-sub">Check bus routes, ticket prices, and lost & found.</div>
+                        <div style="margin-top:auto; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                            <a href="utilities.php" class="c-btn"
+                                style="font-size:0.75rem; padding:0.3rem 0.6rem;">Bus/Prices</a>
+                            <a href="lostfound_list.php" class="c-btn"
+                                style="font-size:0.75rem; padding:0.3rem 0.6rem;">Lost&Found</a>
+                            <a href="meal_list.php" class="c-btn"
+                                style="font-size:0.75rem; padding:0.3rem 0.6rem;">Meals</a>
+                        </div>
                     </div>
                 </div>
-            </div>
+            <?php endif; ?>
 
         </div>
 
         <!-- RIGHT COLUMN (Sidebar Stats) -->
         <div>
             <!-- Budget -->
-            <div class="card" style="margin-bottom:1.5rem;">
-                <div class="c-title" style="display:flex; justify-content:space-between;">
-                    <span>💰 Budget</span>
-                    <span style="font-size:0.8rem; color:#94a3b8; font-weight:400">This Month</span>
-                </div>
-                <div style="margin-top:1rem;">
-                    <?php if (empty($budgetSummary)): ?>
-                        <div style="color:#64748b; font-size:0.9rem;">No data yet.</div>
-                    <?php else: ?>
-                        <?php foreach ($budgetSummary as $b): ?>
-                            <div style="margin-bottom:0.8rem;">
-                                <div
-                                    style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.2rem;">
-                                    <span><?php echo $b['Name']; ?></span>
-                                    <span><?php echo number_format($b['Spent']); ?> / <?php echo $b['MonthlyLimit']; ?></span>
-                                </div>
-                                <div style="height:6px; background:#334155; border-radius:4px; overflow:hidden;">
-                                    <?php $pct = ($b['MonthlyLimit'] > 0) ? ($b['Spent'] / $b['MonthlyLimit']) * 100 : 0; ?>
+            <?php if ($role === 'Student'): ?>
+                <div class="card" style="margin-bottom:1.5rem;">
+                    <div class="c-title" style="display:flex; justify-content:space-between;">
+                        <span>💰 Budget</span>
+                        <span style="font-size:0.8rem; color:#94a3b8; font-weight:400">This Month</span>
+                    </div>
+                    <div style="margin-top:1rem;">
+                        <?php if (empty($budgetSummary)): ?>
+                            <div style="color:#64748b; font-size:0.9rem;">No data yet.</div>
+                        <?php else: ?>
+                            <?php foreach ($budgetSummary as $b): ?>
+                                <div style="margin-bottom:0.8rem;">
                                     <div
-                                        style="height:100%; width:<?php echo min($pct, 100); ?>%; background:<?php echo ($pct > 90 ? '#ef4444' : '#8b5cf6'); ?>">
+                                        style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.2rem;">
+                                        <span><?php echo $b['Name']; ?></span>
+                                        <span><?php echo number_format($b['Spent']); ?> / <?php echo $b['MonthlyLimit']; ?></span>
+                                    </div>
+                                    <div style="height:6px; background:#334155; border-radius:4px; overflow:hidden;">
+                                        <?php $pct = ($b['MonthlyLimit'] > 0) ? ($b['Spent'] / $b['MonthlyLimit']) * 100 : 0; ?>
+                                        <div
+                                            style="height:100%; width:<?php echo min($pct, 100); ?>%; background:<?php echo ($pct > 90 ? '#ef4444' : '#8b5cf6'); ?>">
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                    <a href="budget.php" class="c-btn" style="background:#8b5cf6; margin-top:1rem;">Manage Budget</a>
                 </div>
-                <a href="budget.php" class="c-btn" style="background:#8b5cf6; margin-top:1rem;">Manage Budget</a>
-            </div>
 
-            <!-- Mood (STUDENT ONLY) -->
-            <?php if ($role === 'Student'): ?>
+                <!-- Mood (STUDENT ONLY) -->
                 <div class="card">
                     <div class="c-title">😊 Mood Tracker</div>
                     <div style="margin-top:0.5rem;">
