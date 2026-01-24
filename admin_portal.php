@@ -293,6 +293,16 @@ $res = $conn->query("
 while ($row = $res->fetch_assoc()) {
     $users[] = $row;
 }
+
+// Fetch Pending Reports Count
+$pendingReportsCount = 0;
+$stmtReport = $conn->prepare("SELECT COUNT(*) FROM REPORTS WHERE Status = 'Pending'");
+if ($stmtReport) {
+    $stmtReport->execute();
+    $stmtReport->bind_result($pendingReportsCount);
+    $stmtReport->fetch();
+    $stmtReport->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -506,7 +516,10 @@ while ($row = $res->fetch_assoc()) {
     <div class="container">
         <div class="header">
             <h1>🛡️ Admin Portal</h1>
-            <a href="index.php" class="btn-back">← Back to Dashboard</a>
+            <div>
+                <a href="admin_reports.php" class="btn" style="background:#ef4444; color:white; margin-right:1rem;">⚠️ Manage Reports</a>
+                <a href="index.php" class="btn-back">← Back to Dashboard</a>
+            </div>
         </div>
 
         <?php if ($message): ?>
@@ -534,6 +547,10 @@ while ($row = $res->fetch_assoc()) {
             <div class="stat-card">
                 <div class="stat-label">Pending Services</div>
                 <div class="stat-value"><?php echo count($pendingServices); ?></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending Reports</div>
+                <div class="stat-value" style="color:#ef4444"><?php echo $pendingReportsCount; ?></div>
             </div>
         </div>
 

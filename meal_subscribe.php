@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$stmt) {
             die("Prepare failed: " . $conn->error);
         }
-        $stmt->bind_param("iissssd", $plan['ProviderID'], $_SESSION['user_id'], $date, $timeSlot, $address, $price);
+        $stmt->bind_param("iisssd", $plan['ProviderID'], $_SESSION['user_id'], $date, $timeSlot, $address, $price);
         if ($stmt->execute()) {
             $success = true;
         } else {

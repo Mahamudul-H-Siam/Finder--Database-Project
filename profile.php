@@ -355,6 +355,9 @@ $bStmt->close();
                 <span class="role-badge">
                     <?php echo htmlspecialchars($user['Role']); ?>
                 </span>
+                <span class="role-badge" style="background:rgba(59,130,246,0.1); color:#60a5fa; margin-left:0.5rem;">
+                    ID: <?php echo $userId; ?>
+                </span>
                 <p style="margin-top:0.5rem; font-size:0.85rem;">Member since
                     <?php echo date('M Y', strtotime($user['CreatedAt'])); ?>
                 </p>

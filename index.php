@@ -21,7 +21,7 @@ $budgetAlert = false;
 
 if ($role === 'Student') {
     // Room Apps
-    $stmt = $conn->prepare("SELECT ra.Status, r.Title, u.FullName as OwnerName FROM ROOMAPPLICATION ra JOIN ROOMLISTING r ON ra.RoomID = r.RoomID JOIN USER u ON r.OwnerID = u.UserID WHERE ra.ApplicantID = ? ORDER BY ra.AppliedAt DESC LIMIT 3");
+    $stmt = $conn->prepare("SELECT ra.ApplicationID, ra.Status, r.Title, u.FullName as OwnerName FROM ROOMAPPLICATION ra JOIN ROOMLISTING r ON ra.RoomID = r.RoomID JOIN USER u ON r.OwnerID = u.UserID WHERE ra.ApplicantID = ? ORDER BY ra.AppliedAt DESC LIMIT 3");
     $stmt->bind_param("i", $userId);
     $stmt->execute();
     $myRoomApps = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -540,9 +540,11 @@ if ($role === 'Student') {
                                         <div class="li-main"><?php echo htmlspecialchars($app['Title']); ?></div>
                                         <div class="li-sub"><?php echo htmlspecialchars($app['OwnerName']); ?></div>
                                     </div>
-                                    <div
-                                        class="status <?php echo ($app['Status'] == 'Accepted' ? 'st-green' : ($app['Status'] == 'Rejected' ? 'st-red' : 'st-yellow')); ?>">
-                                        <?php echo ($app['Status'] == 'Pending' ? 'Processing' : $app['Status']); ?>
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <div class="status <?php echo ($app['Status'] == 'Accepted' ? 'st-green' : ($app['Status'] == 'Rejected' ? 'st-red' : 'st-yellow')); ?>">
+                                            <?php echo ($app['Status'] == 'Pending' ? 'Processing' : $app['Status']); ?>
+                                        </div>
+                                        <a href="submit_report.php?type=Application&ref_id=<?php echo $app['ApplicationID']; ?>" title="Report Issue" style="text-decoration:none; font-size:1.2rem;">⚠️</a>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -561,14 +563,17 @@ if ($role === 'Student') {
                                         <div class="li-main"><?php echo htmlspecialchars($bk['ServiceType']); ?></div>
                                         <div class="li-sub"><?php echo htmlspecialchars($bk['BusinessName']); ?></div>
                                     </div>
-                                    <div
-                                        class="status <?php echo ($bk['BookingStatus'] == 'Confirmed' ? 'st-green' : 'st-yellow'); ?>">
-                                        <?php echo ($bk['BookingStatus'] == 'Pending' ? 'Processing' : $bk['BookingStatus']); ?>
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <div
+                                            class="status <?php echo ($bk['BookingStatus'] == 'Confirmed' ? 'st-green' : 'st-yellow'); ?>">
+                                            <?php echo ($bk['BookingStatus'] == 'Pending' ? 'Processing' : $bk['BookingStatus']); ?>
+                                        </div>
+                                        <?php if ($bk['BookingStatus'] === 'Completed'): ?>
+                                            <a href="rate_service.php?booking_id=<?php echo $bk['BookingID']; ?>"
+                                                style="font-size:0.75rem; background:#fbbf24; color:#451a03; padding:0.2rem 0.5rem; border-radius:4px; text-decoration:none;">Rate</a>
+                                        <?php endif; ?>
+                                        <a href="submit_report.php?type=Booking&ref_id=<?php echo $bk['BookingID']; ?>" title="Report Issue" style="text-decoration:none; font-size:1.2rem;">⚠️</a>
                                     </div>
-                                    <?php if ($bk['BookingStatus'] === 'Completed'): ?>
-                                        <a href="rate_service.php?booking_id=<?php echo $bk['BookingID']; ?>"
-                                            style="font-size:0.75rem; background:#fbbf24; color:#451a03; padding:0.2rem 0.5rem; border-radius:4px; text-decoration:none; margin-left:0.5rem;">Rate</a>
-                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         <?php endif; ?>
